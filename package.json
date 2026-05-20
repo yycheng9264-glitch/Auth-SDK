@@ -14,6 +14,7 @@
     "dev": "rollup -c -w",
     "build": "rollup -c",
     "clean": "rm -rf dist",
+    "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
