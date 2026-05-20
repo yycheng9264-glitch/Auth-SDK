@@ -1,0 +1,34 @@
+{
+  "name": "@team/auth-sdk",
+  "version": "0.1.0",
+  "private": true,
+  "description": "统一登录鉴权 SDK，支持 Web 模式（appId+appSecret）和企微模式（OAuth），适配 SPA 工程化项目和纯 HTML 页面",
+  "main": "dist/auth-sdk.cjs.js",
+  "module": "dist/auth-sdk.esm.js",
+  "browser": "dist/auth-sdk.umd.js",
+  "types": "dist/types/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "dev": "rollup -c -w",
+    "build": "rollup -c",
+    "clean": "rm -rf dist",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "auth",
+    "sdk",
+    "authentication",
+    "wechat-work"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^25.0.0",
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "rollup": "^4.0.0",
+    "tslib": "^2.6.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  示例：纯 HTML 页面接入 auth-sdk（CDN 方式）
+  ============================================================
+  流程：
+  1. 页面加载时业务内容默认隐藏
+  2. SDK 初始化后调用 guard()
+  3. 未登录 → SDK 自动弹出全屏登录页
+  4. 登录成功 → 显示业务内容
+  ============================================================
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HTML 示例 - auth-sdk</title>
+  <style>
+    /* 业务内容初始隐藏，鉴权通过后显示 */
+    #app {
+      display: none;
+      max-width: 800px;
+      margin: 60px auto;
+      padding: 0 20px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    #app h1 { color: #1a1a1a; }
+    #app .card {
+      background: #f5f7fa;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 16px 0;
+    }
+    #app button {
+      padding: 8px 20px;
+      background: #ff4d4f;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #app button:hover { background: #ff7875; }
+    /* 加载提示 */
+    #loading {
+      text-align: center;
+      margin-top: 80px;
+      color: #8c8c8c;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+  </style>
+</head>
+<body>
+  <!-- 加载中提示 -->
+  <div id="loading">加载中，请稍候...</div>
+
+  <!-- ============================================================
+       业务内容（鉴权通过后显示）
+       ============================================================ -->
+  <div id="app">
+    <h1>业务系统</h1>
+    <p>鉴权已通过，以下是业务内容</p>
+
+    <div class="card">
+      <h3>用户信息</h3>
+      <pre id="userInfo">加载中...</pre>
+    </div>
+
+    <div class="card">
+      <h3>Token 信息</h3>
+      <pre id="tokenInfo">加载中...</pre>
+    </div>
+
+    <button id="logoutBtn">退出登录</button>
+  </div>
+
+  <!-- ============================================================
+       引入 SDK（CDN 方式）
+       ============================================================ -->
+  <script src="../../dist/auth-sdk.umd.js"></script>
+  <script>
+    // ============================================================
+    // 方式一：直接通过全局变量 AuthSDK 访问
+    // ============================================================
+    const auth = AuthSDK.create({
+      mode: 'web',                                    // 使用 Web 模式
+      authCenterUrl: 'https://auth-center.example.com', // 替换为实际的鉴权中心地址
+      loginUI: 'fullscreen',                          // 全屏登录页
+    })
+
+    // ============================================================
+    // 鉴权守卫：未登录 → 自动弹登录页 → 登录成功 → 执行业务逻辑
+    // ============================================================
+    auth.guard()
+      .then(() => {
+        // 鉴权通过，隐藏 loading 提示，显示业务内容
+        document.getElementById('loading').style.display = 'none'
+        document.getElementById('app').style.display = 'block'
+
+        // 显示用户信息
+        const userInfo = auth.getUserInfo()
+        document.getElementById('userInfo').textContent = userInfo
+          ? JSON.stringify(userInfo, null, 2)
+          : '（Web 模式无用户信息）'
+
+        // 显示 token 信息
+        const token = auth.getToken()
+        document.getElementById('tokenInfo').textContent = token
+          ? `accessToken: ${token.substring(0, 20)}...`
+          : '（无 token）'
+      })
+      .catch((err) => {
+        // 用户取消了登录
+        document.getElementById('loading').textContent = '已取消登录'
+        console.warn('鉴权取消:', err.message)
+      })
+
+    // ============================================================
+    // 退出登录
+    // ============================================================
+    document.getElementById('logoutBtn').addEventListener('click', () => {
+      auth.logout()
+      // 刷新页面回到未登录状态，SDK 会再次弹出登录页
+      location.reload()
+    })
+  </script>
+</body>
+</html>
