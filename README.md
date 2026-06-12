@@ -1,4 +1,4 @@
-# @team/auth-sdk
+﻿# @yycheng9264-glitch/tool-auth
 
 统一登录鉴权 SDK，支持 **Web 模式**（appId + appSecret）和 **企微模式**（OAuth），适配 SPA 工程化项目和纯 HTML 页面。
 
@@ -16,11 +16,11 @@
 ### npm 方式（SPA 工程化项目）
 
 ```bash
-npm install @team/auth-sdk
+npm install @yycheng9264-glitch/tool-auth
 ```
 
 ```ts
-import { createAuthSDK } from '@team/auth-sdk'
+import { createAuthSDK } from '@yycheng9264-glitch/tool-auth'
 
 const auth = createAuthSDK({
   mode: 'web',

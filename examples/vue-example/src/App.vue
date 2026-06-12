@@ -1,4 +1,4 @@
-<!--
+﻿<!--
   ============================================================
   Vue 示例 - 业务主页面
   ============================================================
@@ -31,7 +31,7 @@
 
 <script setup lang="ts">
 import { ref, inject, onMounted } from 'vue'
-import type { AuthSDKInstance, AuthInfo, UserInfo } from '@team/auth-sdk'
+import type { AuthSDKInstance, AuthInfo, UserInfo } from '@yycheng9264-glitch/tool-auth'
 
 const auth = inject<AuthSDKInstance>('auth')!
 

@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // React 示例 - 应用入口
 //
 // 接入 auth-sdk 的核心模式：
@@ -9,7 +9,7 @@
 
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { createAuthSDK } from '@team/auth-sdk'
+import { createAuthSDK } from '@yycheng9264-glitch/tool-auth'
 import App from './App'
 
 // ============================================================

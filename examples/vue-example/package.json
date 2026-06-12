@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "auth-sdk-vue-example",
   "private": true,
   "version": "0.0.0",
@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "vue": "^3.4.0",
-    "@team/auth-sdk": "file:../.."
+    "@yycheng9264-glitch/tool-auth": "file:../.."
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

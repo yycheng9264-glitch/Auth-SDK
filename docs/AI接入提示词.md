@@ -1,4 +1,4 @@
-# 以下内容可直接复制发送给 AI 工具（如 Claude Code、Cursor 等）
+﻿# 以下内容可直接复制发送给 AI 工具（如 Claude Code、Cursor 等）
 
 ---
 
@@ -6,7 +6,7 @@
 
 ## SDK 信息
 
-- 依赖：`"@team/auth-sdk": "github:yycheng9264-glitch/Auth-SDK"`
+- 依赖：`"@yycheng9264-glitch/tool-auth": "^0.1.0"`
 - 入口 API：`createAuthSDK(config)` → `auth.guard()` → `auth.logout()` → `auth.fetch()`
 - 鉴权模式：Web 模式（用户在登录弹窗输入 appId + appSecret，换取 token）
 
@@ -17,7 +17,7 @@
 在 `package.json` 的 `dependencies` 中添加：
 
 ```json
-"@team/auth-sdk": "github:yycheng9264-glitch/Auth-SDK"
+"@yycheng9264-glitch/tool-auth": "^0.1.0"
 ```
 
 执行 `npm install`。
@@ -39,7 +39,7 @@ VITE_AUTH_URL=
 ```tsx
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { createAuthSDK } from "@team/auth-sdk";
+import { createAuthSDK } from "@yycheng9264-glitch/tool-auth";
 import App from "./App";
 
 // 从环境变量读取鉴权中心地址，开发环境留空走 Vite proxy
@@ -104,7 +104,7 @@ export default defineConfig({
 
 | 文件 | 改动 |
 |------|------|
-| `package.json` | dependencies 加 `@team/auth-sdk` |
+| `package.json` | dependencies 加 `@yycheng9264-glitch/tool-auth` |
 | `.env` | 加 `VITE_AUTH_URL` |
 | `vite.config.ts` | proxy 加 `/auth-center` |
 | `src/main.tsx` | 引入 SDK，`auth.guard()` 包裹 render |

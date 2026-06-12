@@ -1,4 +1,4 @@
-// ============================================================
+﻿// ============================================================
 // React 示例 - 业务主页面
 //
 // 展示 SDK 的常用操作：
@@ -9,7 +9,7 @@
 // ============================================================
 
 import React, { useState, useEffect } from 'react'
-import type { AuthSDKInstance, AuthInfo, UserInfo } from '@team/auth-sdk'
+import type { AuthSDKInstance, AuthInfo, UserInfo } from '@yycheng9264-glitch/tool-auth'
 
 interface AppProps {
   auth: AuthSDKInstance

@@ -15,6 +15,11 @@ export declare class AuthSDK implements AuthSDKInstance {
      */
     private initModeHandler;
     /**
+     * 创建请求客户端并绑定统一的 401 处理。
+     * updateConfig() 重建客户端时也必须走这里，避免丢失 onUnauthorized。
+     */
+    private createHttpClient;
+    /**
      * 展示登录 UI
      * 根据 loginUI 配置决定弹窗还是全屏
      * 返回一个 Promise，登录成功后 resolve

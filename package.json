@@ -1,7 +1,6 @@
 {
-  "name": "@team/auth-sdk",
+  "name": "@yycheng9264-glitch/tool-auth",
   "version": "0.1.0",
-  "private": true,
   "description": "统一登录鉴权 SDK，支持 Web 模式（appId+appSecret）和企微模式（OAuth），适配 SPA 工程化项目和纯 HTML 页面",
   "main": "dist/auth-sdk.cjs.js",
   "module": "dist/auth-sdk.esm.js",
@@ -13,7 +12,7 @@
   "scripts": {
     "dev": "rollup -c -w",
     "build": "rollup -c",
-    "clean": "rm -rf dist",
+    "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build"
   },

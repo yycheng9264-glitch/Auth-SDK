@@ -49,18 +49,7 @@ export class AuthSDK implements AuthSDKInstance {
       this.config.tokenExpireBuffer,
     )
 
-    this.httpClient = new HttpClient({
-      getToken: () => this.tokenManager.getToken(),
-      getAuthInfo: () => this.tokenManager.getAuthInfo(),
-      baseUrl: this.config.authCenterUrl,
-      timeout: this.config.requestTimeout,
-    })
-
-    // 设置 401 自动处理：清除 token 并弹登录页
-    this.httpClient.onUnauthorized = () => {
-      this.tokenManager.clear()
-      this.showLoginUI()
-    }
+    this.httpClient = this.createHttpClient()
 
     // 初始化对应模式的处理器
     this.initModeHandler()
@@ -75,6 +64,27 @@ export class AuthSDK implements AuthSDKInstance {
     } else if (this.config.mode === 'wework') {
       this.modeHandler = new WeWorkMode(this.httpClient, this.config.redirect)
     }
+  }
+
+  /**
+   * 创建请求客户端并绑定统一的 401 处理。
+   * updateConfig() 重建客户端时也必须走这里，避免丢失 onUnauthorized。
+   */
+  private createHttpClient(): HttpClient {
+    const client = new HttpClient({
+      getToken: () => this.tokenManager.getToken(),
+      getAuthInfo: () => this.tokenManager.getAuthInfo(),
+      baseUrl: this.config.authCenterUrl,
+      timeout: this.config.requestTimeout,
+    })
+
+    client.onUnauthorized = () => {
+      this.guardPromise = null
+      this.tokenManager.clear()
+      void this.showLoginUI().catch(() => {})
+    }
+
+    return client
   }
 
   /**
@@ -151,7 +161,10 @@ export class AuthSDK implements AuthSDKInstance {
     // 防止重复调用导致多个登录弹窗
     if (this.guardPromise) return this.guardPromise
 
-    this.guardPromise = this._guard()
+    this.guardPromise = this._guard().catch((error) => {
+      this.guardPromise = null
+      throw error
+    })
     return this.guardPromise
   }
 
@@ -240,6 +253,7 @@ export class AuthSDK implements AuthSDKInstance {
    * 清除所有本地认证数据
    */
   logout(): void {
+    this.guardPromise = null
     this.tokenManager.clear()
     this.config.onLogout()
   }
@@ -264,21 +278,42 @@ export class AuthSDK implements AuthSDKInstance {
    * 合并到现有配置中，可用于运行时切换后端地址
    */
   updateConfig(config: Partial<AuthSDKConfig>): void {
-    Object.assign(this.config, config)
-    // 如果地址变了，更新 httpClient 的基础地址
-    if (config.authCenterUrl) {
-      // 重新创建 httpClient 较为安全
-      this.httpClient = new HttpClient({
-        getToken: () => this.tokenManager.getToken(),
-        getAuthInfo: () => this.tokenManager.getAuthInfo(),
-        baseUrl: this.config.authCenterUrl,
-        timeout: this.config.requestTimeout,
-      })
+    const previous = {
+      authCenterUrl: this.config.authCenterUrl,
+      requestTimeout: this.config.requestTimeout,
+      mode: this.config.mode,
+      redirect: this.config.redirect,
+      loginUI: this.config.loginUI,
     }
-    // 如果模式变了，重新初始化处理器
-    if (config.mode && config.mode !== this.config.mode) {
-      this.config.mode = config.mode
+
+    Object.assign(this.config, config)
+
+    const shouldRecreateHttpClient =
+      (config.authCenterUrl !== undefined &&
+        config.authCenterUrl !== previous.authCenterUrl) ||
+      (config.requestTimeout !== undefined &&
+        config.requestTimeout !== previous.requestTimeout)
+
+    const shouldReinitModeHandler =
+      shouldRecreateHttpClient ||
+      (config.mode !== undefined && config.mode !== previous.mode) ||
+      (config.redirect !== undefined && config.redirect !== previous.redirect)
+
+    if (shouldRecreateHttpClient) {
+      this.httpClient = this.createHttpClient()
+    }
+
+    if (shouldReinitModeHandler) {
       this.initModeHandler()
+    }
+
+    if (
+      shouldRecreateHttpClient ||
+      shouldReinitModeHandler ||
+      (config.loginUI !== undefined && config.loginUI !== previous.loginUI)
+    ) {
+      this.guardPromise = null
+      this.loginModal = null
     }
   }
 
