@@ -51,9 +51,12 @@ function getDefaultConfig() {
     return {
         // ---- 必填项（业务方需在初始化时传入，此处给空字符串占位） ----
         mode: 'web',
+        appId: '',
         authCenterUrl: '',
         // ---- 可选项（有合理默认值） ----
         redirect: typeof window !== 'undefined' ? window.location.origin : '',
+        weworkRedirect: typeof window !== 'undefined' ? window.location.href : '',
+        weworkSessionHours: 8,
         storagePrefix: 'auth_sdk_',
         loginUI: 'fullscreen',
         requestTimeout: 15000,
@@ -399,7 +402,9 @@ function hasCodeParam() {
  * // 返回 'https://api.example.com/login?appId=test&code=abc'
  */
 function appendQueryParams(baseUrl, params) {
-    const urlObj = new URL(baseUrl);
+    const urlObj = baseUrl.startsWith('http')
+        ? new URL(baseUrl)
+        : new URL(baseUrl, window.location.origin);
     Object.entries(params).forEach(([key, value]) => {
         urlObj.searchParams.append(key, value);
     });
@@ -495,9 +500,10 @@ class WebMode {
 //   Response: { userId, userName, mobile, ... }
 // ============================================================
 class WeWorkMode {
-    constructor(httpClient, redirectUrl) {
+    constructor(httpClient, redirectUrl, sessionHours = 8) {
         this.authCenterUrl = httpClient.baseUrl;
         this.redirectUrl = redirectUrl;
+        this.sessionHours = sessionHours;
     }
     /**
      * 获取企微授权 URL
@@ -506,17 +512,14 @@ class WeWorkMode {
      * @param appId  应用标识
      * @returns      企微授权 URL
      */
-    getOAuthUrl(appId) {
+    getOAuthUrl(appId, state, redirect) {
         return __awaiter(this, void 0, void 0, function* () {
             if (!appId) {
                 throw new Error('请输入 App ID');
             }
             const url = `${this.authCenterUrl}/auth-center/api/thirdparty/auth/oauth-url`;
             // 拼接查询参数
-            const fullUrl = appendQueryParams(url, {
-                appId,
-                redirect: this.redirectUrl,
-            });
+            const fullUrl = appendQueryParams(url, Object.assign(Object.assign({ appId }, (state ? { state } : {})), { redirect: redirect || this.redirectUrl }));
             let response;
             try {
                 response = yield fetch(fullUrl, {
@@ -531,10 +534,14 @@ class WeWorkMode {
                 throw new HttpError(response.status, '获取企微授权地址失败', yield response.text().catch(() => ''));
             }
             const result = yield response.json();
-            if (!result.data) {
+            const oauthUrl = typeof result === 'string' ? result : result.data;
+            if (!oauthUrl) {
+                const message = typeof result === 'string' ? '' : result.message;
+                if (message)
+                    throw new Error(message);
                 throw new Error('获取企微授权地址失败：接口未返回有效的 URL');
             }
-            return result.data;
+            return oauthUrl;
         });
     }
     /**
@@ -575,14 +582,18 @@ class WeWorkMode {
             if (!response.ok) {
                 throw new HttpError(response.status, '企微登录失败', yield response.text().catch(() => ''));
             }
-            const userInfo = yield response.json();
+            const result = yield response.json();
+            const userInfo = 'data' in result && result.data ? result.data : result;
             if (!userInfo.userId) {
+                const message = 'message' in result ? result.message : '';
+                if (message)
+                    throw new Error(message);
                 throw new Error('企微登录失败：未获取到用户信息');
             }
             // 企微模式没有 token，使用用户 ID 构造一个标识 token
             // 后续如果需要调用业务接口，业务方自行决定鉴权方式
             const sessionToken = `wework_${userInfo.userId}_${Date.now()}`;
-            const expiresAt = Date.now() + 8 * 60 * 60 * 1000; // 默认 8 小时有效
+            const expiresAt = Date.now() + this.sessionHours * 60 * 60 * 1000;
             return {
                 token: sessionToken,
                 tokenType: 'Bearer',
@@ -769,6 +780,20 @@ const loginStyles = `
   border-top-color: #fff;
   border-radius: 50%;
   animation: auth-sdk-spin 0.6s linear infinite;
+}
+
+.auth-sdk-loading-card {
+  text-align: center;
+}
+
+.auth-sdk-loading-spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 20px;
+  border: 3px solid rgba(22, 119, 255, 0.18);
+  border-top-color: #1677ff;
+  border-radius: 50%;
+  animation: auth-sdk-spin 0.7s linear infinite;
 }
 
 @keyframes auth-sdk-spin {
@@ -1044,6 +1069,56 @@ class LoginModal {
     }
 }
 
+class LoadingOverlay {
+    constructor() {
+        this.container = null;
+        this.root = null;
+    }
+    show(title, subtitle) {
+        var _a, _b;
+        if (this.container) {
+            const titleEl = (_a = this.root) === null || _a === void 0 ? void 0 : _a.querySelector('.auth-sdk-title');
+            const subtitleEl = (_b = this.root) === null || _b === void 0 ? void 0 : _b.querySelector('.auth-sdk-subtitle');
+            if (titleEl)
+                titleEl.textContent = title;
+            if (subtitleEl)
+                subtitleEl.textContent = subtitle;
+            this.container.style.display = '';
+            return;
+        }
+        this.container = document.createElement('div');
+        this.root = this.container.attachShadow({ mode: 'closed' });
+        const styleEl = document.createElement('style');
+        styleEl.textContent = loginStyles;
+        this.root.appendChild(styleEl);
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `
+      <div class="auth-sdk-overlay fullscreen">
+        <div class="auth-sdk-card auth-sdk-loading-card">
+          <div class="auth-sdk-loading-spinner"></div>
+          <h2 class="auth-sdk-title">${title}</h2>
+          <p class="auth-sdk-subtitle">${subtitle}</p>
+        </div>
+      </div>
+    `;
+        this.root.appendChild(wrapper);
+        document.body.appendChild(this.container);
+    }
+    hide() {
+        if (this.container) {
+            this.container.style.display = 'none';
+        }
+    }
+    destroy() {
+        var _a;
+        if ((_a = this.container) === null || _a === void 0 ? void 0 : _a.parentNode) {
+            this.container.parentNode.removeChild(this.container);
+        }
+        this.container = null;
+        this.root = null;
+    }
+}
+
 // ============================================================
 // core/AuthSDK.ts — SDK 主类
 //
@@ -1056,6 +1131,7 @@ class LoginModal {
 class AuthSDK {
     constructor(config) {
         this.loginModal = null;
+        this.loadingOverlay = null;
         /** 当前登录模式的处理器 */
         this.modeHandler = null;
         /** 防止 guard() 被重复调用 */
@@ -1076,7 +1152,7 @@ class AuthSDK {
             this.modeHandler = new WebMode(this.httpClient);
         }
         else if (this.config.mode === 'wework') {
-            this.modeHandler = new WeWorkMode(this.httpClient, this.config.redirect);
+            this.modeHandler = new WeWorkMode(this.httpClient, this.getWeWorkRedirectUrl(), this.config.weworkSessionHours);
         }
     }
     /**
@@ -1093,9 +1169,40 @@ class AuthSDK {
         client.onUnauthorized = () => {
             this.guardPromise = null;
             this.tokenManager.clear();
-            void this.showLoginUI().catch(() => { });
+            if (this.config.mode === 'wework') {
+                void this.startWeWorkAuthorization().catch(() => { });
+            }
+            else {
+                void this.showLoginUI().catch(() => { });
+            }
         };
         return client;
+    }
+    getWeWorkRedirectUrl() {
+        if (this.config.weworkRedirect)
+            return this.config.weworkRedirect;
+        if (typeof window !== 'undefined')
+            return window.location.href;
+        return this.config.redirect;
+    }
+    getWeWorkAppId() {
+        return this.config.appId || '';
+    }
+    createOAuthState() {
+        const random = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+            ? crypto.randomUUID()
+            : Math.random().toString(36).slice(2);
+        return `wework_${Date.now()}_${random}`;
+    }
+    showLoading(title, subtitle) {
+        if (!this.loadingOverlay) {
+            this.loadingOverlay = new LoadingOverlay();
+        }
+        this.loadingOverlay.show(title, subtitle);
+    }
+    hideLoading() {
+        var _a;
+        (_a = this.loadingOverlay) === null || _a === void 0 ? void 0 : _a.hide();
     }
     /**
      * 展示登录 UI
@@ -1185,8 +1292,11 @@ class AuthSDK {
                     return info;
             }
             // ---- 企微模式特殊处理：检测 OAuth 回跳 ----
-            if (this.config.mode === 'wework' && hasCodeParam()) {
-                return this.handleWeWorkCallback();
+            if (this.config.mode === 'wework') {
+                if (hasCodeParam()) {
+                    return this.handleWeWorkCallback();
+                }
+                return this.startWeWorkAuthorization();
             }
             // ---- 未登录，弹出登录页面 ----
             return this.showLoginUI();
@@ -1200,46 +1310,63 @@ class AuthSDK {
         return __awaiter(this, void 0, void 0, function* () {
             const code = getUrlParam('code');
             if (!code) {
-                // 没有 code 但仍进入了此方法，回退到弹出登录页
-                return this.showLoginUI();
+                return this.startWeWorkAuthorization();
             }
-            // 企微回调场景：需要用户先输入 appId
-            // 因为 code 是企微返回的临时授权码，需要结合 appId 才能换取用户信息
-            return new Promise((resolve, reject) => {
-                if (!this.loginModal) {
-                    this.loginModal = new LoginModal({
-                        mode: this.config.mode,
-                        uiStyle: this.config.loginUI,
-                        isCallback: true, // 标记为回调模式，UI 给出对应的提示文案
-                        onSubmit: (credentials) => __awaiter(this, void 0, void 0, function* () {
-                            var _a;
-                            try {
-                                const info = yield this.modeHandler.login(Object.assign(Object.assign({}, credentials), { 
-                                    // 把 code 传给登录处理器
-                                    code }));
-                                this.tokenManager.saveAuthInfo(info);
-                                if (info.userInfo) {
-                                    this.tokenManager.saveUserInfo(info.userInfo);
-                                }
-                                // 清除 URL 中的 code，防止刷新后重复处理
-                                cleanUrlParam('code');
-                                (_a = this.loginModal) === null || _a === void 0 ? void 0 : _a.hide();
-                                this.config.onLogin(info);
-                                resolve(info);
-                            }
-                            catch (error) {
-                                throw error;
-                            }
-                        }),
-                        onCancel: () => {
-                            // 用户取消，清除 code 防止死循环
-                            cleanUrlParam('code');
-                            reject(new Error('用户取消登录'));
-                        },
-                    });
+            const appId = this.getWeWorkAppId();
+            if (!appId) {
+                throw new Error('企微登录缺少 appId，请在 createAuthSDK 中配置 appId');
+            }
+            const actualState = getUrlParam('state');
+            const expectedState = this.storage.get('wework_oauth_state');
+            if (!expectedState || actualState !== expectedState) {
+                this.storage.remove('wework_oauth_state');
+                this.storage.remove('wework_return_url');
+                cleanUrlParam('code');
+                cleanUrlParam('state');
+                return this.startWeWorkAuthorization();
+            }
+            this.showLoading('企微授权处理中', '正在验证企微身份，请稍候...');
+            try {
+                const info = yield this.modeHandler.login({ appId, code });
+                this.tokenManager.saveAuthInfo(info);
+                if (info.userInfo) {
+                    this.tokenManager.saveUserInfo(info.userInfo);
                 }
-                this.loginModal.show();
-            });
+                this.storage.remove('wework_oauth_state');
+                this.storage.remove('wework_return_url');
+                cleanUrlParam('code');
+                cleanUrlParam('state');
+                this.hideLoading();
+                this.config.onLogin(info);
+                return info;
+            }
+            catch (error) {
+                this.storage.remove('wework_oauth_state');
+                this.storage.remove('wework_return_url');
+                this.hideLoading();
+                throw error;
+            }
+        });
+    }
+    startWeWorkAuthorization() {
+        return __awaiter(this, void 0, void 0, function* () {
+            const appId = this.getWeWorkAppId();
+            if (!appId) {
+                throw new Error('企微登录缺少 appId，请在 createAuthSDK 中配置 appId');
+            }
+            if (!(this.modeHandler instanceof WeWorkMode)) {
+                throw new Error('未初始化企微鉴权模式处理器');
+            }
+            const state = this.createOAuthState();
+            const redirect = this.getWeWorkRedirectUrl();
+            this.storage.set('wework_oauth_state', state);
+            if (typeof window !== 'undefined') {
+                this.storage.set('wework_return_url', window.location.href);
+            }
+            this.showLoading('正在跳转企微授权', '即将打开企业微信授权页面...');
+            const oauthUrl = yield this.modeHandler.getOAuthUrl(appId, state, redirect);
+            window.location.href = oauthUrl;
+            return new Promise(() => { });
         });
     }
     /**
@@ -1253,6 +1380,9 @@ class AuthSDK {
      */
     login() {
         return __awaiter(this, void 0, void 0, function* () {
+            if (this.config.mode === 'wework') {
+                return this.startWeWorkAuthorization();
+            }
             return this.showLoginUI();
         });
     }
@@ -1261,7 +1391,10 @@ class AuthSDK {
      * 清除所有本地认证数据
      */
     logout() {
+        var _a;
         this.guardPromise = null;
+        (_a = this.loadingOverlay) === null || _a === void 0 ? void 0 : _a.destroy();
+        this.loadingOverlay = null;
         this.tokenManager.clear();
         this.config.onLogout();
     }
@@ -1287,6 +1420,9 @@ class AuthSDK {
             requestTimeout: this.config.requestTimeout,
             mode: this.config.mode,
             redirect: this.config.redirect,
+            weworkRedirect: this.config.weworkRedirect,
+            weworkSessionHours: this.config.weworkSessionHours,
+            appId: this.config.appId,
             loginUI: this.config.loginUI,
         };
         Object.assign(this.config, config);
@@ -1296,7 +1432,12 @@ class AuthSDK {
                 config.requestTimeout !== previous.requestTimeout);
         const shouldReinitModeHandler = shouldRecreateHttpClient ||
             (config.mode !== undefined && config.mode !== previous.mode) ||
-            (config.redirect !== undefined && config.redirect !== previous.redirect);
+            (config.redirect !== undefined && config.redirect !== previous.redirect) ||
+            (config.weworkRedirect !== undefined &&
+                config.weworkRedirect !== previous.weworkRedirect) ||
+            (config.weworkSessionHours !== undefined &&
+                config.weworkSessionHours !== previous.weworkSessionHours) ||
+            (config.appId !== undefined && config.appId !== previous.appId);
         if (shouldRecreateHttpClient) {
             this.httpClient = this.createHttpClient();
         }

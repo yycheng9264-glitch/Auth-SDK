@@ -25,6 +25,7 @@ import { getUrlParam, cleanUrlParam, hasCodeParam } from '../utils/url'
 import { WebMode } from '../modes/WebMode'
 import { WeWorkMode } from '../modes/WeWorkMode'
 import { LoginModal } from '../ui/LoginModal'
+import { LoadingOverlay } from '../ui/LoadingOverlay'
 
 export class AuthSDK implements AuthSDKInstance {
   private config: ResolvedConfig
@@ -32,6 +33,7 @@ export class AuthSDK implements AuthSDKInstance {
   private httpClient: HttpClient
   private storage: Storage
   private loginModal: LoginModal | null = null
+  private loadingOverlay: LoadingOverlay | null = null
 
   /** 当前登录模式的处理器 */
   private modeHandler: WebMode | WeWorkMode | null = null
@@ -62,7 +64,11 @@ export class AuthSDK implements AuthSDKInstance {
     if (this.config.mode === 'web') {
       this.modeHandler = new WebMode(this.httpClient)
     } else if (this.config.mode === 'wework') {
-      this.modeHandler = new WeWorkMode(this.httpClient, this.config.redirect)
+      this.modeHandler = new WeWorkMode(
+        this.httpClient,
+        this.getWeWorkRedirectUrl(),
+        this.config.weworkSessionHours,
+      )
     }
   }
 
@@ -81,10 +87,43 @@ export class AuthSDK implements AuthSDKInstance {
     client.onUnauthorized = () => {
       this.guardPromise = null
       this.tokenManager.clear()
-      void this.showLoginUI().catch(() => {})
+      if (this.config.mode === 'wework') {
+        void this.startWeWorkAuthorization().catch(() => {})
+      } else {
+        void this.showLoginUI().catch(() => {})
+      }
     }
 
     return client
+  }
+
+  private getWeWorkRedirectUrl(): string {
+    if (this.config.weworkRedirect) return this.config.weworkRedirect
+    if (typeof window !== 'undefined') return window.location.href
+    return this.config.redirect
+  }
+
+  private getWeWorkAppId(): string {
+    return this.config.appId || ''
+  }
+
+  private createOAuthState(): string {
+    const random =
+      typeof crypto !== 'undefined' && 'randomUUID' in crypto
+        ? crypto.randomUUID()
+        : Math.random().toString(36).slice(2)
+    return `wework_${Date.now()}_${random}`
+  }
+
+  private showLoading(title: string, subtitle: string): void {
+    if (!this.loadingOverlay) {
+      this.loadingOverlay = new LoadingOverlay()
+    }
+    this.loadingOverlay.show(title, subtitle)
+  }
+
+  private hideLoading(): void {
+    this.loadingOverlay?.hide()
   }
 
   /**
@@ -176,8 +215,11 @@ export class AuthSDK implements AuthSDKInstance {
     }
 
     // ---- 企微模式特殊处理：检测 OAuth 回跳 ----
-    if (this.config.mode === 'wework' && hasCodeParam()) {
-      return this.handleWeWorkCallback()
+    if (this.config.mode === 'wework') {
+      if (hasCodeParam()) {
+        return this.handleWeWorkCallback()
+      }
+      return this.startWeWorkAuthorization()
     }
 
     // ---- 未登录，弹出登录页面 ----
@@ -191,47 +233,69 @@ export class AuthSDK implements AuthSDKInstance {
   private async handleWeWorkCallback(): Promise<AuthInfo> {
     const code = getUrlParam('code')
     if (!code) {
-      // 没有 code 但仍进入了此方法，回退到弹出登录页
-      return this.showLoginUI()
+      return this.startWeWorkAuthorization()
     }
 
-    // 企微回调场景：需要用户先输入 appId
-    // 因为 code 是企微返回的临时授权码，需要结合 appId 才能换取用户信息
-    return new Promise((resolve, reject) => {
-      if (!this.loginModal) {
-        this.loginModal = new LoginModal({
-          mode: this.config.mode,
-          uiStyle: this.config.loginUI,
-          isCallback: true, // 标记为回调模式，UI 给出对应的提示文案
-          onSubmit: async (credentials: LoginCredentials) => {
-            try {
-              const info = await this.modeHandler!.login({
-                ...credentials,
-                // 把 code 传给登录处理器
-                code,
-              })
-              this.tokenManager.saveAuthInfo(info)
-              if (info.userInfo) {
-                this.tokenManager.saveUserInfo(info.userInfo)
-              }
-              // 清除 URL 中的 code，防止刷新后重复处理
-              cleanUrlParam('code')
-              this.loginModal?.hide()
-              this.config.onLogin(info)
-              resolve(info)
-            } catch (error) {
-              throw error
-            }
-          },
-          onCancel: () => {
-            // 用户取消，清除 code 防止死循环
-            cleanUrlParam('code')
-            reject(new Error('用户取消登录'))
-          },
-        })
+    const appId = this.getWeWorkAppId()
+    if (!appId) {
+      throw new Error('企微登录缺少 appId，请在 createAuthSDK 中配置 appId')
+    }
+
+    const actualState = getUrlParam('state')
+    const expectedState = this.storage.get<string>('wework_oauth_state')
+    if (!expectedState || actualState !== expectedState) {
+      this.storage.remove('wework_oauth_state')
+      this.storage.remove('wework_return_url')
+      cleanUrlParam('code')
+      cleanUrlParam('state')
+      return this.startWeWorkAuthorization()
+    }
+
+    this.showLoading('企微授权处理中', '正在验证企微身份，请稍候...')
+
+    try {
+      const info = await this.modeHandler!.login({ appId, code })
+      this.tokenManager.saveAuthInfo(info)
+      if (info.userInfo) {
+        this.tokenManager.saveUserInfo(info.userInfo)
       }
-      this.loginModal.show()
-    })
+
+      this.storage.remove('wework_oauth_state')
+      this.storage.remove('wework_return_url')
+      cleanUrlParam('code')
+      cleanUrlParam('state')
+      this.hideLoading()
+      this.config.onLogin(info)
+      return info
+    } catch (error) {
+      this.storage.remove('wework_oauth_state')
+      this.storage.remove('wework_return_url')
+      this.hideLoading()
+      throw error
+    }
+  }
+
+  private async startWeWorkAuthorization(): Promise<AuthInfo> {
+    const appId = this.getWeWorkAppId()
+    if (!appId) {
+      throw new Error('企微登录缺少 appId，请在 createAuthSDK 中配置 appId')
+    }
+    if (!(this.modeHandler instanceof WeWorkMode)) {
+      throw new Error('未初始化企微鉴权模式处理器')
+    }
+
+    const state = this.createOAuthState()
+    const redirect = this.getWeWorkRedirectUrl()
+    this.storage.set('wework_oauth_state', state)
+    if (typeof window !== 'undefined') {
+      this.storage.set('wework_return_url', window.location.href)
+    }
+
+    this.showLoading('正在跳转企微授权', '即将打开企业微信授权页面...')
+    const oauthUrl = await this.modeHandler.getOAuthUrl(appId, state, redirect)
+    window.location.href = oauthUrl
+
+    return new Promise<AuthInfo>(() => {})
   }
 
   /**
@@ -245,6 +309,9 @@ export class AuthSDK implements AuthSDKInstance {
    * 主动触发登录
    */
   async login(): Promise<AuthInfo> {
+    if (this.config.mode === 'wework') {
+      return this.startWeWorkAuthorization()
+    }
     return this.showLoginUI()
   }
 
@@ -254,6 +321,8 @@ export class AuthSDK implements AuthSDKInstance {
    */
   logout(): void {
     this.guardPromise = null
+    this.loadingOverlay?.destroy()
+    this.loadingOverlay = null
     this.tokenManager.clear()
     this.config.onLogout()
   }
@@ -283,6 +352,9 @@ export class AuthSDK implements AuthSDKInstance {
       requestTimeout: this.config.requestTimeout,
       mode: this.config.mode,
       redirect: this.config.redirect,
+      weworkRedirect: this.config.weworkRedirect,
+      weworkSessionHours: this.config.weworkSessionHours,
+      appId: this.config.appId,
       loginUI: this.config.loginUI,
     }
 
@@ -297,7 +369,12 @@ export class AuthSDK implements AuthSDKInstance {
     const shouldReinitModeHandler =
       shouldRecreateHttpClient ||
       (config.mode !== undefined && config.mode !== previous.mode) ||
-      (config.redirect !== undefined && config.redirect !== previous.redirect)
+      (config.redirect !== undefined && config.redirect !== previous.redirect) ||
+      (config.weworkRedirect !== undefined &&
+        config.weworkRedirect !== previous.weworkRedirect) ||
+      (config.weworkSessionHours !== undefined &&
+        config.weworkSessionHours !== previous.weworkSessionHours) ||
+      (config.appId !== undefined && config.appId !== previous.appId)
 
     if (shouldRecreateHttpClient) {
       this.httpClient = this.createHttpClient()

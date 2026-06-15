@@ -176,6 +176,20 @@ export const loginStyles = `
   animation: auth-sdk-spin 0.6s linear infinite;
 }
 
+.auth-sdk-loading-card {
+  text-align: center;
+}
+
+.auth-sdk-loading-spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 20px;
+  border: 3px solid rgba(22, 119, 255, 0.18);
+  border-top-color: #1677ff;
+  border-radius: 50%;
+  animation: auth-sdk-spin 0.7s linear infinite;
+}
+
 @keyframes auth-sdk-spin {
   to { transform: rotate(360deg); }
 }

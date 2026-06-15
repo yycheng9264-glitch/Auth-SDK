@@ -5,6 +5,7 @@ export declare class AuthSDK implements AuthSDKInstance {
     private httpClient;
     private storage;
     private loginModal;
+    private loadingOverlay;
     /** 当前登录模式的处理器 */
     private modeHandler;
     /** 防止 guard() 被重复调用 */
@@ -19,6 +20,11 @@ export declare class AuthSDK implements AuthSDKInstance {
      * updateConfig() 重建客户端时也必须走这里，避免丢失 onUnauthorized。
      */
     private createHttpClient;
+    private getWeWorkRedirectUrl;
+    private getWeWorkAppId;
+    private createOAuthState;
+    private showLoading;
+    private hideLoading;
     /**
      * 展示登录 UI
      * 根据 loginUI 配置决定弹窗还是全屏
@@ -49,6 +55,7 @@ export declare class AuthSDK implements AuthSDKInstance {
      * URL 中携带 ?code=xxx，调用 login 接口换取用户信息
      */
     private handleWeWorkCallback;
+    private startWeWorkAuthorization;
     /**
      * 检查是否已登录（仅检查本地存储，不触发网络请求或登录流程）
      */

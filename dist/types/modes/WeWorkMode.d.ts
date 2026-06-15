@@ -2,9 +2,10 @@ import type { AuthInfo, LoginCredentials } from '../types';
 export declare class WeWorkMode {
     private authCenterUrl;
     private redirectUrl;
+    private sessionHours;
     constructor(httpClient: {
         baseUrl: string;
-    }, redirectUrl: string);
+    }, redirectUrl: string, sessionHours?: number);
     /**
      * 获取企微授权 URL
      * 前端拿到 URL 后需要引导用户完成企微的授权
@@ -12,7 +13,7 @@ export declare class WeWorkMode {
      * @param appId  应用标识
      * @returns      企微授权 URL
      */
-    getOAuthUrl(appId: string): Promise<string>;
+    getOAuthUrl(appId: string, state?: string, redirect?: string): Promise<string>;
     /**
      * 企微模式登录
      * 用企微回调的 code 换取用户信息

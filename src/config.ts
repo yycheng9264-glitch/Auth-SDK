@@ -20,10 +20,13 @@ export function getDefaultConfig(): ResolvedConfig {
   return {
     // ---- 必填项（业务方需在初始化时传入，此处给空字符串占位） ----
     mode: 'web',
+    appId: '',
     authCenterUrl: '',
 
     // ---- 可选项（有合理默认值） ----
     redirect: typeof window !== 'undefined' ? window.location.origin : '',
+    weworkRedirect: typeof window !== 'undefined' ? window.location.href : '',
+    weworkSessionHours: 8,
     storagePrefix: 'auth_sdk_',
     loginUI: 'fullscreen',
     requestTimeout: 15000,

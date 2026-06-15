@@ -72,7 +72,9 @@ export function hasCodeParam(): boolean {
  * // 返回 'https://api.example.com/login?appId=test&code=abc'
  */
 export function appendQueryParams(baseUrl: string, params: Record<string, string>): string {
-  const urlObj = new URL(baseUrl)
+  const urlObj = baseUrl.startsWith('http')
+    ? new URL(baseUrl)
+    : new URL(baseUrl, window.location.origin)
   Object.entries(params).forEach(([key, value]) => {
     urlObj.searchParams.append(key, value)
   })

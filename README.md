@@ -33,6 +33,28 @@ auth.guard().then(() => {
 })
 ```
 
+### 企微模式
+
+企微模式由 SDK 独立处理授权跳转和回调参数，业务项目不需要新增回调页面。
+后端当前返回企微用户信息，SDK 会生成本地会话并保存 `userInfo`。
+
+```ts
+const auth = createAuthSDK({
+  mode: 'wework',
+  appId: 'wework_ai_application',
+  authCenterUrl: 'https://auth-center.example.com',
+})
+
+auth.guard().then(() => {
+  startApp()
+})
+```
+
+SDK 会调用：
+
+- `GET /auth-center/api/thirdparty/auth/oauth-url`
+- `GET /auth-center/api/thirdparty/auth/login`
+
 ### CDN 方式（纯 HTML 页面）
 
 ```html

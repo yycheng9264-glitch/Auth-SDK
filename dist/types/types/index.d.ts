@@ -58,10 +58,16 @@ export interface LoginCredentials {
 export interface AuthSDKConfig {
     /** 鉴权模式：web | wework */
     mode: AuthMode;
+    /** 统一认证服务颁发的应用标识，企微模式可用于自动发起授权 */
+    appId?: string;
     /** 后端鉴权中心基础地址（必填），如 https://auth-center.example.com */
     authCenterUrl: string;
     /** 企微回调地址，默认当前页面 origin */
     redirect?: string;
+    /** 企微授权回调地址；默认当前页面完整 URL */
+    weworkRedirect?: string;
+    /** 企微本地会话有效时长（小时），默认 8 小时 */
+    weworkSessionHours?: number;
     /** localStorage key 前缀，默认 'auth_sdk_'，多应用共存时使用 */
     storagePrefix?: string;
     /** 登录 UI 样式：modal | fullscreen */

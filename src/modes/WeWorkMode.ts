@@ -24,15 +24,29 @@ import { HttpError } from '../core/Http'
  */
 interface OAuthUrlResponse {
   data: string  // 企微授权 URL
+  success?: boolean
+  message?: string
+}
+
+interface UserInfoResponse {
+  data?: UserInfo
+  success?: boolean
+  message?: string
 }
 
 export class WeWorkMode {
   private authCenterUrl: string
   private redirectUrl: string
+  private sessionHours: number
 
-  constructor(httpClient: { baseUrl: string }, redirectUrl: string) {
+  constructor(
+    httpClient: { baseUrl: string },
+    redirectUrl: string,
+    sessionHours = 8,
+  ) {
     this.authCenterUrl = httpClient.baseUrl
     this.redirectUrl = redirectUrl
+    this.sessionHours = sessionHours
   }
 
   /**
@@ -42,7 +56,7 @@ export class WeWorkMode {
    * @param appId  应用标识
    * @returns      企微授权 URL
    */
-  async getOAuthUrl(appId: string): Promise<string> {
+  async getOAuthUrl(appId: string, state?: string, redirect?: string): Promise<string> {
     if (!appId) {
       throw new Error('请输入 App ID')
     }
@@ -52,7 +66,8 @@ export class WeWorkMode {
     // 拼接查询参数
     const fullUrl = appendQueryParams(url, {
       appId,
-      redirect: this.redirectUrl,
+      ...(state ? { state } : {}),
+      redirect: redirect || this.redirectUrl,
     })
 
     let response: Response
@@ -73,13 +88,16 @@ export class WeWorkMode {
       )
     }
 
-    const result = await response.json() as OAuthUrlResponse
+    const result = await response.json() as OAuthUrlResponse | string
+    const oauthUrl = typeof result === 'string' ? result : result.data
 
-    if (!result.data) {
+    if (!oauthUrl) {
+      const message = typeof result === 'string' ? '' : result.message
+      if (message) throw new Error(message)
       throw new Error('获取企微授权地址失败：接口未返回有效的 URL')
     }
 
-    return result.data
+    return oauthUrl
   }
 
   /**
@@ -129,16 +147,19 @@ export class WeWorkMode {
       )
     }
 
-    const userInfo = await response.json() as UserInfo
+    const result = await response.json() as UserInfo | UserInfoResponse
+    const userInfo = 'data' in result && result.data ? result.data : result as UserInfo
 
     if (!userInfo.userId) {
+      const message = 'message' in result ? result.message : ''
+      if (message) throw new Error(message)
       throw new Error('企微登录失败：未获取到用户信息')
     }
 
     // 企微模式没有 token，使用用户 ID 构造一个标识 token
     // 后续如果需要调用业务接口，业务方自行决定鉴权方式
     const sessionToken = `wework_${userInfo.userId}_${Date.now()}`
-    const expiresAt = Date.now() + 8 * 60 * 60 * 1000 // 默认 8 小时有效
+    const expiresAt = Date.now() + this.sessionHours * 60 * 60 * 1000
 
     return {
       token: sessionToken,
